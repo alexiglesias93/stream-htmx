@@ -1,16 +1,24 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import {
+  UpdateIDHandler,
+  RemoveItemHandler,
+  UpdateInputValueHandler,
+  UpdateTextHandler,
+} from './todos';
 
 const app = new Hono();
 
 app.use('*', cors());
 
-app.get('/', (c) => {
-  return c.text('Hello Hono!');
+app.get('/', async (c) => {
+  const response = await fetch(`https://stream-htmx.webflow.io/custom-server`);
+
+  return new Response(response.body, response);
 });
 
 app.get('/todos', (c) => {
-  return c.html('<h1>Todos</h1>');
+  return c.body(null);
 });
 
 app.post('/todos', async (c) => {
@@ -22,18 +30,45 @@ app.post('/todos', async (c) => {
 
   const id = crypto.randomUUID();
 
-  // Generate the new HTML using the inputs
-  return c.html(/*html*/ `
-  <div id="todo_item_${id}" class="todo_item">
-    <div>${title}</div>
+  // Fetch Webflow's page
+  const response = await fetch('https://stream-htmx.webflow.io/custom-server');
 
-    <form hx-delete="http://127.0.0.1:8787/todos" hx-target="#todo_item_${id}" hx-swap="outerHTML">
-      <input type="hidden" name="id" value="${id}">
-      <input type="hidden" name="title" value="${title}">
-      <button type="submit" class="todo_item-delete">Delete</button>
-    </form>
-  </div>
-  `);
+  // Mutate Webflow's page
+  return new HTMLRewriter()
+    .on('[data-element="todo_item"]', new UpdateIDHandler(id))
+    .on(
+      '[data-element="todo_item"] [data-element="title"]',
+      new UpdateTextHandler(title!)
+    )
+    .on('[data-element="title-input"]', new UpdateInputValueHandler(title!))
+    .on(
+      '[data-element="title-input"][data-type="edit"]',
+      new RemoveItemHandler()
+    )
+    .transform(response);
+});
+
+app.post('/todos/edit', async (c) => {
+  // Get the inputs
+  const input = await c.req.formData();
+  const title = input.get('title');
+
+  // TODO: Do something when there is no title
+
+  const id = crypto.randomUUID();
+
+  // Fetch Webflow's page
+  const response = await fetch('https://stream-htmx.webflow.io/custom-server');
+
+  // Mutate Webflow's page
+  return new HTMLRewriter()
+    .on('[data-element="todo_item"]', new UpdateIDHandler(id))
+    .on(
+      '[data-element="todo_item"] [data-element="title"]',
+      new RemoveItemHandler()
+    )
+    .on('[data-element="title-input"]', new UpdateInputValueHandler(title!))
+    .transform(response);
 });
 
 app.delete('/todos', (c) => {
